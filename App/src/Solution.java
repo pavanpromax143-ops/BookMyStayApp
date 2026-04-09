@@ -1,133 +1,104 @@
 import java.util.*;
 
-/* ------------------ CUSTOM EXCEPTIONS ------------------ */
-class InvalidRoomTypeException extends Exception {
-    public InvalidRoomTypeException(String message) { super(message); }
-}
+/**
+ * ============================================================
+ * MAIN CLASS - UseCase10BookingCancellation
+ * Use Case 10: Booking Cancellation & Inventory Rollback
+ * ============================================================
+ */
 
-class InsufficientInventoryException extends Exception {
-    public InsufficientInventoryException(String message) { super(message); }
-}
+ class UseCase10BookingCancellation {
 
-/* ------------------ VALIDATOR ------------------ */
-class BookingValidator {
-    public static void validateRequest(String type, Map<String, Integer> inventory)
-            throws InvalidRoomTypeException, InsufficientInventoryException {
+    // ------------------- RoomInventory -------------------
+    static class RoomInventory {
+        private Map<String, Integer> inventory;
 
-        if (!inventory.containsKey(type))
-            throw new InvalidRoomTypeException("Error: Room type '" + type + "' does not exist.");
+        public RoomInventory() {
+            inventory = new HashMap<>();
+            inventory.put("Single", 5); // initial rooms
+            inventory.put("Double", 3);
+        }
 
-        if (inventory.get(type) <= 0)
-            throw new InsufficientInventoryException("Error: No vacancy for '" + type + "'.");
-    }
-}
+        public void increaseRoom(String roomType) {
+            inventory.put(roomType, inventory.getOrDefault(roomType, 0) + 1);
+        }
 
-/* ------------------ RESERVATION MODEL ------------------ */
-class Reservation {
-    private String guestName;
-    private String roomType;
-
-    public Reservation(String guestName, String roomType) {
-        this.guestName = guestName;
-        this.roomType = roomType;
-    }
-
-    public String getGuestName() { return guestName; }
-    public String getRoomType() { return roomType; }
-}
-
-/* ------------------ BOOKING HISTORY ------------------ */
-class BookingHistory {
-    private List<Reservation> history = new ArrayList<>();
-
-    public void addReservation(Reservation r) {
-        history.add(r); // insertion order preserved
-    }
-
-    public List<Reservation> getAllReservations() {
-        return Collections.unmodifiableList(history);
-    }
-}
-
-/* ------------------ REPORT SERVICE ------------------ */
-class BookingReportService {
-
-    public static void printAllBookings(BookingHistory history) {
-        System.out.println("\n--- Booking History Report ---");
-
-        for (Reservation r : history.getAllReservations()) {
-            System.out.println("Guest: " + r.getGuestName()
-                    + " | Room: " + r.getRoomType());
+        public int getAvailability(String roomType) {
+            return inventory.getOrDefault(roomType, 0);
         }
     }
 
-    public static void printSummary(BookingHistory history) {
-        Map<String, Integer> summary = new HashMap<>();
+    // ------------------- CancellationService -------------------
+    static class CancellationService {
 
-        for (Reservation r : history.getAllReservations()) {
-            summary.put(r.getRoomType(),
-                    summary.getOrDefault(r.getRoomType(), 0) + 1);
+        // Stack for rollback history
+        private Stack<String> releasedRoomIds;
+
+        // Map reservation -> room type
+        private Map<String, String> reservationRoomTypeMap;
+
+        public CancellationService() {
+            releasedRoomIds = new Stack<>();
+            reservationRoomTypeMap = new HashMap<>();
         }
 
-        System.out.println("\n--- Booking Summary ---");
-        for (String type : summary.keySet()) {
-            System.out.println(type + " booked: " + summary.get(type));
-        }
-    }
-}
-
-/* ------------------ CORE SYSTEM ------------------ */
-class HotelSystem {
-    private Map<String, Integer> inventory = new HashMap<>();
-    private BookingHistory history = new BookingHistory();
-
-    public void addInventory(String type, int count) {
-        inventory.put(type, count);
-    }
-
-    public BookingHistory getHistory() {
-        return history;
-    }
-
-    public void processBooking(String guest, String type) {
-        System.out.println("[PROCESSING] " + guest + " requesting " + type + "...");
-
-        try {
-            BookingValidator.validateRequest(type, inventory);
-
-            inventory.put(type, inventory.get(type) - 1);
-            System.out.println("SUCCESS: Booking confirmed for " + guest);
-
-            // Store in history
-            history.addReservation(new Reservation(guest, type));
-
-        } catch (InvalidRoomTypeException | InsufficientInventoryException e) {
-            System.err.println("REJECTED: " + e.getMessage());
-        } catch (Exception e) {
-            System.err.println("CRITICAL: An unexpected error occurred.");
+        // Register booking
+        public void registerBooking(String reservationId, String roomType) {
+            reservationRoomTypeMap.put(reservationId, roomType);
         }
 
-        System.out.println("-------------------------------------------");
-    }
-}
+        // Cancel booking
+        public void cancelBooking(String reservationId, RoomInventory inventory) {
 
-/* ------------------ MAIN APPLICATION ------------------ */
- class BookMyStayApp {
+            if (!reservationRoomTypeMap.containsKey(reservationId)) {
+                System.out.println("Invalid Reservation ID!");
+                return;
+            }
+
+            String roomType = reservationRoomTypeMap.get(reservationId);
+
+            System.out.println("Booking Cancellation");
+
+            // Restore inventory
+            inventory.increaseRoom(roomType);
+
+            // Push into stack (rollback)
+            releasedRoomIds.push(reservationId);
+
+            // Remove booking
+            reservationRoomTypeMap.remove(reservationId);
+
+            System.out.println("Booking cancelled successfully. Inventory restored for room type: " + roomType);
+        }
+
+        // Show rollback history
+        public void showRollbackHistory() {
+            System.out.println("\nRollback History (Most Recent First):");
+
+            ListIterator<String> it = releasedRoomIds.listIterator(releasedRoomIds.size());
+            while (it.hasPrevious()) {
+                System.out.println("Released Reservation ID: " + it.previous());
+            }
+        }
+    }
+
+    // ------------------- MAIN METHOD -------------------
     public static void main(String[] args) {
 
-        HotelSystem hotel = new HotelSystem();
-        hotel.addInventory("Suite", 1);
-        hotel.addInventory("Single", 5);
+        RoomInventory inventory = new RoomInventory();
+        CancellationService service = new CancellationService();
 
-        System.out.println("Hotel Booking System with History Tracking\n");
+        // Step 1: Register booking
+        service.registerBooking("Single-1", "Single");
 
-        hotel.processBooking("Alice", "Suite");
-        hotel.processBooking("Bob", "Suite");       // rejected
-        hotel.processBooking("Charlie", "Single");
-        hotel.processBooking("David", "Penthouse"); // rejected
+        // Step 2: Cancel booking
+        service.cancelBooking("Single-1", inventory);
 
-        // Admin viewing reports
-        BookingReportService.printAllBookings(hotel.getHistory());
-        BookingReportService.printSummary(hotel.getHistory());
+        // Step 3: Show rollback history
+        service.showRollbackHistory();
+
+        // Step 4: Show updated availability
+        System.out.println("\nUpdated Single Room Availability: " +
+                inventory.getAvailability("Single"));
     }
 }
