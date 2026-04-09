@@ -1,8 +1,7 @@
 
-// Version 3.1
+// Version 4.1
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 // Abstract Room Class
 abstract class Room {
@@ -23,54 +22,32 @@ abstract class Room {
     public int getSize() { return size; }
     public double getPrice() { return price; }
 
-    public abstract void displayDetails(int availability);
+    public void displayDetails(int availability) {
+        System.out.println(type + ":");
+        System.out.println("Beds: " + beds);
+        System.out.println("Size: " + size + " sqft");
+        System.out.println("Price per night: " + price);
+        System.out.println("Available: " + availability);
+        System.out.println();
+    }
 }
 
-// Single Room
+// Room Types
 class SingleRoom extends Room {
     public SingleRoom() {
         super("Single Room", 1, 250, 1500.0);
     }
-
-    public void displayDetails(int availability) {
-        System.out.println("Single Room:");
-        System.out.println("Beds: " + getBeds());
-        System.out.println("Size: " + getSize() + " sqft");
-        System.out.println("Price per night: " + getPrice());
-        System.out.println("Available Rooms: " + availability);
-        System.out.println();
-    }
 }
 
-// Double Room
 class DoubleRoom extends Room {
     public DoubleRoom() {
         super("Double Room", 2, 400, 2500.0);
     }
-
-    public void displayDetails(int availability) {
-        System.out.println("Double Room:");
-        System.out.println("Beds: " + getBeds());
-        System.out.println("Size: " + getSize() + " sqft");
-        System.out.println("Price per night: " + getPrice());
-        System.out.println("Available Rooms: " + availability);
-        System.out.println();
-    }
 }
 
-// Suite Room
 class SuiteRoom extends Room {
     public SuiteRoom() {
         super("Suite Room", 3, 750, 5000.0);
-    }
-
-    public void displayDetails(int availability) {
-        System.out.println("Suite Room:");
-        System.out.println("Beds: " + getBeds());
-        System.out.println("Size: " + getSize() + " sqft");
-        System.out.println("Price per night: " + getPrice());
-        System.out.println("Available Rooms: " + availability);
-        System.out.println();
     }
 }
 
@@ -82,11 +59,30 @@ class RoomInventory {
         inventory = new HashMap<>();
         inventory.put("Single Room", 5);
         inventory.put("Double Room", 3);
-        inventory.put("Suite Room", 2);
+        inventory.put("Suite Room", 2); // All available
     }
 
     public int getAvailability(String roomType) {
         return inventory.getOrDefault(roomType, 0);
+    }
+}
+
+// Search Service (Read-Only)
+class RoomSearchService {
+
+    public void searchRooms(List<Room> rooms, RoomInventory inventory) {
+
+        System.out.println("Room Search\n");
+
+        for (Room room : rooms) {
+
+            int available = inventory.getAvailability(room.getType());
+
+            // Show only available rooms (>0)
+            if (available > 0) {
+                room.displayDetails(available);
+            }
+        }
     }
 }
 
@@ -95,16 +91,15 @@ class RoomInventory {
 
     public static void main(String[] args) {
 
-        Room single = new SingleRoom();
-        Room doubleRoom = new DoubleRoom();
-        Room suite = new SuiteRoom();
+        List<Room> rooms = new ArrayList<>();
+        rooms.add(new SingleRoom());
+        rooms.add(new DoubleRoom());
+        rooms.add(new SuiteRoom());
 
         RoomInventory inventory = new RoomInventory();
 
-        System.out.println("Hotel Room Inventory Status\n");
+        RoomSearchService service = new RoomSearchService();
 
-        single.displayDetails(inventory.getAvailability("Single Room"));
-        doubleRoom.displayDetails(inventory.getAvailability("Double Room"));
-        suite.displayDetails(inventory.getAvailability("Suite Room"));
+        service.searchRooms(rooms, inventory);
     }
 }
