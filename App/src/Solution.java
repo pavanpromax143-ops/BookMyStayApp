@@ -1,80 +1,133 @@
 import java.util.*;
 
-/**
- * --- DOMAIN LAYER ---
- */
-class ConfirmedBooking {
-    private String reservationId;
-    private String guestName;
-    private String roomType;
-    private double totalCost;
+/* ------------------ CUSTOM EXCEPTIONS ------------------ */
+class InvalidRoomTypeException extends Exception {
+    public InvalidRoomTypeException(String message) { super(message); }
+}
 
-    public ConfirmedBooking(String id, String name, String type, double cost) {
-        this.reservationId = id;
-        this.guestName = name;
-        this.roomType = type;
-        this.totalCost = cost;
-    }
+class InsufficientInventoryException extends Exception {
+    public InsufficientInventoryException(String message) { super(message); }
+}
 
-    @Override
-    public String toString() {
-        return String.format("ID: %-10s | Guest: %-10s | Room: %-8s | Total: $%.2f",
-                reservationId, guestName, roomType, totalCost);
+/* ------------------ VALIDATOR ------------------ */
+class BookingValidator {
+    public static void validateRequest(String type, Map<String, Integer> inventory)
+            throws InvalidRoomTypeException, InsufficientInventoryException {
+
+        if (!inventory.containsKey(type))
+            throw new InvalidRoomTypeException("Error: Room type '" + type + "' does not exist.");
+
+        if (inventory.get(type) <= 0)
+            throw new InsufficientInventoryException("Error: No vacancy for '" + type + "'.");
     }
 }
 
-/**
- * --- HISTORY & REPORTING SERVICE ---
- */
-class BookingHistory {
-    // List preserves the chronological order of confirmations
-    private List<ConfirmedBooking> history = new ArrayList<>();
+/* ------------------ RESERVATION MODEL ------------------ */
+class Reservation {
+    private String guestName;
+    private String roomType;
 
-    public void recordBooking(ConfirmedBooking booking) {
-        history.add(booking);
+    public Reservation(String guestName, String roomType) {
+        this.guestName = guestName;
+        this.roomType = roomType;
     }
 
-    public void generateAdminReport() {
-        System.out.println("\n========== ADMINISTRATIVE BOOKING REPORT ==========");
-        if (history.isEmpty()) {
-            System.out.println("No confirmed bookings found.");
-        } else {
-            double totalRevenue = 0;
-            for (ConfirmedBooking b : history) {
-                System.out.println(b);
-                // In a real app, we'd extract cost from the object
-                // For this report, we'll just sum them up
-            }
-            System.out.println("==================================================");
-            System.out.println("Total Transactions: " + history.size());
+    public String getGuestName() { return guestName; }
+    public String getRoomType() { return roomType; }
+}
+
+/* ------------------ BOOKING HISTORY ------------------ */
+class BookingHistory {
+    private List<Reservation> history = new ArrayList<>();
+
+    public void addReservation(Reservation r) {
+        history.add(r); // insertion order preserved
+    }
+
+    public List<Reservation> getAllReservations() {
+        return Collections.unmodifiableList(history);
+    }
+}
+
+/* ------------------ REPORT SERVICE ------------------ */
+class BookingReportService {
+
+    public static void printAllBookings(BookingHistory history) {
+        System.out.println("\n--- Booking History Report ---");
+
+        for (Reservation r : history.getAllReservations()) {
+            System.out.println("Guest: " + r.getGuestName()
+                    + " | Room: " + r.getRoomType());
+        }
+    }
+
+    public static void printSummary(BookingHistory history) {
+        Map<String, Integer> summary = new HashMap<>();
+
+        for (Reservation r : history.getAllReservations()) {
+            summary.put(r.getRoomType(),
+                    summary.getOrDefault(r.getRoomType(), 0) + 1);
+        }
+
+        System.out.println("\n--- Booking Summary ---");
+        for (String type : summary.keySet()) {
+            System.out.println(type + " booked: " + summary.get(type));
         }
     }
 }
 
-/**
- * --- APPLICATION ENTRY POINT ---
- */
-class BookMyStayApp {
+/* ------------------ CORE SYSTEM ------------------ */
+class HotelSystem {
+    private Map<String, Integer> inventory = new HashMap<>();
+    private BookingHistory history = new BookingHistory();
+
+    public void addInventory(String type, int count) {
+        inventory.put(type, count);
+    }
+
+    public BookingHistory getHistory() {
+        return history;
+    }
+
+    public void processBooking(String guest, String type) {
+        System.out.println("[PROCESSING] " + guest + " requesting " + type + "...");
+
+        try {
+            BookingValidator.validateRequest(type, inventory);
+
+            inventory.put(type, inventory.get(type) - 1);
+            System.out.println("SUCCESS: Booking confirmed for " + guest);
+
+            // Store in history
+            history.addReservation(new Reservation(guest, type));
+
+        } catch (InvalidRoomTypeException | InsufficientInventoryException e) {
+            System.err.println("REJECTED: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("CRITICAL: An unexpected error occurred.");
+        }
+
+        System.out.println("-------------------------------------------");
+    }
+}
+
+/* ------------------ MAIN APPLICATION ------------------ */
+ class BookMyStayApp {
     public static void main(String[] args) {
-        // 1. Initialize History Service
-        BookingHistory historyService = new BookingHistory();
 
-        System.out.println("System: Processing Confirmed Transactions...\n");
+        HotelSystem hotel = new HotelSystem();
+        hotel.addInventory("Suite", 1);
+        hotel.addInventory("Single", 5);
 
-        // 2. Simulate confirming bookings (Logic from Use Case 6 & 7)
-        // In a real flow, these would be added automatically after allocation
-        ConfirmedBooking b1 = new ConfirmedBooking("SUITE-101", "Alice", "Suite", 495.00);
-        ConfirmedBooking b2 = new ConfirmedBooking("SINGL-102", "Charlie", "Single", 125.00);
-        ConfirmedBooking b3 = new ConfirmedBooking("SINGL-103", "David", "Single", 100.00);
+        System.out.println("Hotel Booking System with History Tracking\n");
 
-        // 3. Record to History (The Audit Trail)
-        historyService.recordBooking(b1);
-        historyService.recordBooking(b2);
-        historyService.recordBooking(b3);
+        hotel.processBooking("Alice", "Suite");
+        hotel.processBooking("Bob", "Suite");       // rejected
+        hotel.processBooking("Charlie", "Single");
+        hotel.processBooking("David", "Penthouse"); // rejected
 
-        // 4. Admin requests a report
-        historyService.generateAdminReport();
-
-        System.out.println("\nNote: History is stored in-memory and persists for the application lifetime.");
+        // Admin viewing reports
+        BookingReportService.printAllBookings(hotel.getHistory());
+        BookingReportService.printSummary(hotel.getHistory());
     }
 }
